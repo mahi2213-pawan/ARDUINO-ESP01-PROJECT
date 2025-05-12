@@ -1,0 +1,73 @@
+#include <SoftwareSerial.h>
+#include <DHT.h>
+
+#define DHTPIN 9  // GPIO0 for DHT11 Sensor
+#define DHTTYPE DHT11
+
+SoftwareSerial esp01Serial(3, 2); // RX, TX for ESP-01S communication
+DHT dht(DHTPIN, DHTTYPE);
+
+// WiFi Credentials
+String WIFI_SSID = "realme 9 Pro+";
+String WIFI_PASS = "18901234";
+
+// ThingSpeak Settings
+String apiKey = "A3SFDMR5K6KHBGS9";  
+String HOST = "api.thingspeak.com";
+String PORT = "80";
+
+void setup() {
+  Serial.begin(115200);
+  esp01Serial.begin(115200);
+  dht.begin();
+
+  Serial.print("Connecting to WiFi...");
+  sendCommand("AT", 5, "OK");
+  sendCommand("AT+CWMODE=1", 5, "OK");
+  sendCommand("AT+CWJAP=\"" + WIFI_SSID + "\",\"" + WIFI_PASS + "\"", 20, "OK");
+}
+
+void loop() {
+  float humidity = dht.readHumidity();
+  float temperature = dht.readTemperature();
+  
+  Serial.print("Humidity: ");
+  Serial.println(humidity);
+  Serial.print("Temperature: ");
+  Serial.println(temperature);
+
+  String getData = "GET /update?api_key=" + apiKey + "&field1=" + String(humidity) + "&field2=" + String(temperature);
+
+  sendCommand("AT+CIPMUX=1", 5, "OK");
+  sendCommand("AT+CIPSTART=0,\"TCP\",\"" + HOST + "\"," + PORT, 15, "OK");
+  sendCommand("AT+CIPSEND=0," + String(getData.length() + 4), 4, ">");
+  
+  esp01Serial.println(getData);
+  delay(1500);
+
+  sendCommand("AT+CIPCLOSE=0", 5, "OK");
+  delay(20000);
+}
+
+void sendCommand(String command, int maxTime, char readReply[]) {
+  Serial.print("AT Command => ");
+  Serial.println(command);
+
+  int countTimeCommand = 0;
+  bool found = false;
+
+  while (countTimeCommand < maxTime) {
+    esp01Serial.println(command);
+    if (esp01Serial.find(readReply)) {
+      found = true;
+      break;
+    }
+    countTimeCommand++;
+  }
+
+  if (found) {
+    Serial.println("Success");
+  } else {
+    Serial.println("Failed");
+  }
+}
